@@ -225,7 +225,7 @@ function toggleWindowState(src)
     fig = ancestor(src, 'figure');
     state = getappdata(fig, 'appState');
 
-    % ✅ Add this block to retrieve normalization stats
+    % Retrieving normalization stats
     mu_pre = state.mu_pre;
     sigma_pre = state.sigma_pre;
     mu_live = state.mu_live;
@@ -535,7 +535,7 @@ X_input_max = [LAeq_pen, LCeq_pen, Leq63Hz_pen, Hmax, Cmax, ...
                LZFmax_pen / (LAeq_pen + eps), LZF99_pen * Hmax, ...
                LZFmax_pen / (LCF90_pen + eps)];
 
-% ✅ Normalize using live scaling
+% Normalize using live scaling
 X_input = (X_input - mu_live) ./ sigma_live;
 X_input_min = (X_input_min - mu_live) ./ sigma_live;
 X_input_max = (X_input_max - mu_live) ./ sigma_live;
@@ -636,7 +636,7 @@ function toggleLiveHeatmap(src, ax, acousticInputs, model_AR, model_DR, rows, co
     fig = ancestor(src, 'figure');
     state = getappdata(fig, 'appState');
 
-    % ✅ Retrieve normalization variables
+    % Retrieve normalization variables
     mu_pre = state.mu_pre;
     sigma_pre = state.sigma_pre;
     mu_live = state.mu_live;
