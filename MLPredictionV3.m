@@ -1,7 +1,7 @@
 
 % Enhanced LSBoost Training Script with Modular Design, 5-Fold Cross-Validation, Hold-Out Evaluation, and Dual-Target Support
 clc; clear; close all;
-fprintf('🚀 Starting Enhanced LSBoost Training with 5-Fold CV and Final Hold-Out Evaluation...\n');
+fprintf('Starting Enhanced LSBoost Training with 5-Fold CV and Final Hold-Out Evaluation...\n');
 
 %% --------------------- Data Preparation ---------------------
 data = readtable('AR_data2.xlsx');
@@ -97,7 +97,7 @@ function trainEvaluateFinal(X_train, Y_train, X_test, Y_test, featureNames, labe
     end
 
     meanR2 = mean(R2_scores);
-    fprintf("\n✅ Average R² across folds for %s: %.4f\n", label, meanR2);
+    fprintf('Average R² across folds for %s: %.4f\n', label, meanR2);
 
     % Extract best hyperparameters
     bestParams = bestModel.HyperparameterOptimizationResults.XAtMinObjective;
@@ -134,7 +134,7 @@ function trainEvaluateFinal(X_train, Y_train, X_test, Y_test, featureNames, labe
     % Feature Importance
     importance = predictorImportance(model_final);
     [~, idx] = sort(importance, 'descend');
-    fprintf("\n📌 Feature Importance for %s:\n", label);
+    fprintf(' Feature Importance for %s:\n', label);
     for i = 1:length(idx)
         fprintf("  %-25s %.6f\n", featureNames{idx(i)}, importance(idx(i)));
     end
