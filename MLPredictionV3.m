@@ -1,7 +1,6 @@
 
-% Enhanced LSBoost Training Script with Modular Design, 5-Fold Cross-Validation, Hold-Out Evaluation, and Dual-Target Support
+% LSBoost Training Script
 clc; clear; close all;
-fprintf('Starting Enhanced LSBoost Training with 5-Fold CV and Final Hold-Out Evaluation...\n');
 
 %% --------------------- Data Preparation ---------------------
 data = readtable('AR_data2.xlsx');
@@ -9,11 +8,10 @@ if isempty(data), error('Data file not found or empty.'); end
 data = rmmissing(data);
 
 % Feature Engineering
-fprintf("🛠️ Performing feature engineering...\n");
+fprintf(' Performing feature engineering...\n');
 data.Delta_LC_LA = data.LCeq - data.LAeq;
 data.Leq63Hz_LAeq_Ratio = data.Leq63Hz ./ (data.LAeq + eps);
 data.LZFmax_LCFmax_Ratio = data.LZFmax ./ (data.LCFmax + eps);
-data.log_Leq63Hz = log(data.Leq63Hz + eps);
 data.TotalNoiSeQ = data.HNoiSeQ + data.CNoiSeQ;
 data.Delta_ZF_CF = data.LZF99 - data.LCF90;
 data.LAeq_HNoiSeQ = data.LAeq .* data.HNoiSeQ;
@@ -69,7 +67,7 @@ trainEvaluateFinal(Xtrain_live, Ytrain(:,2), Xtest_live, Ytest(:,2), liveFeature
 
 %% --------------------- Functions ---------------------
 function trainEvaluateFinal(X_train, Y_train, X_test, Y_test, featureNames, label, yMin, yMax)
-    fprintf('\n🔁 Starting 5-Fold Cross-Validation for %s...\n', label);
+    fprintf(' Starting 5-Fold Cross-Validation for %s...\n', label);
     cv = cvpartition(size(X_train,1), 'KFold', 5);
     R2_scores = zeros(cv.NumTestSets,1);
     bestR2 = -Inf;
@@ -93,7 +91,7 @@ function trainEvaluateFinal(X_train, Y_train, X_test, Y_test, featureNames, labe
             bestModel = model;
         end
 
-        fprintf("  Fold %d -> R²: %.4f\n", i, R2);
+        fprintf('  Fold %d -> R²: %.4f\n', i, R2);
     end
 
     meanR2 = mean(R2_scores);
@@ -123,20 +121,20 @@ function trainEvaluateFinal(X_train, Y_train, X_test, Y_test, featureNames, labe
     RMSE_test = sqrt(mean((Y_test - Y_test_pred).^2));
     R2_test = 1 - sum((Y_test - Y_test_pred).^2) / sum((Y_test - mean(Y_test)).^2);
 
-    fprintf("\n📊 [%s - Final Hold-Out Evaluation]\n", label);
-    fprintf("  MAE - Training Set : %.4f\n", MAE_train);
-    fprintf("  RMSE - Training Set: %.4f\n", RMSE_train);
-    fprintf("  R²   - Training Set: %.4f\n", R2_train);
-    fprintf("  MAE - Test Set     : %.4f\n", MAE_test);
-    fprintf("  RMSE - Test Set    : %.4f\n", RMSE_test);
-    fprintf("  R²   - Test Set    : %.4f\n", R2_test);
+    fprintf('[%s - Final Hold-Out Evaluation]\n', label);
+    fprintf('  MAE - Training Set : %.4f\n', MAE_train);
+    fprintf('  RMSE - Training Set: %.4f\n', RMSE_train);
+    fprintf('  R²   - Training Set: %.4f\n', R2_train);
+    fprintf('  MAE - Test Set     : %.4f\n', MAE_test);
+    fprintf('  RMSE - Test Set    : %.4f\n', RMSE_test);
+    fprintf('  R²   - Test Set    : %.4f\n', R2_test);
 
     % Feature Importance
     importance = predictorImportance(model_final);
     [~, idx] = sort(importance, 'descend');
     fprintf(' Feature Importance for %s:\n', label);
     for i = 1:length(idx)
-        fprintf("  %-25s %.6f\n", featureNames{idx(i)}, importance(idx(i)));
+        fprintf('  %-25s %.6f\n', featureNames{idx(i)}, importance(idx(i)));
     end
 
     % Save scatter plots
