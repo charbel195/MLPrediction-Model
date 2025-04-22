@@ -608,7 +608,7 @@ function toggleHeatmap(src, ax, acousticInputs, model_AR, model_DR, rows, cols, 
     fig = ancestor(src, 'figure');
     state = getappdata(fig, 'appState');
 
-    % ✅ Retrieve normalization variables
+    % Retrieve normalization variables
     mu_pre = state.mu_pre;
     sigma_pre = state.sigma_pre;
     mu_live = state.mu_live;
