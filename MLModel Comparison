@@ -1,0 +1,154 @@
+clc; clear; close all;
+fprintf('Starting Enhanced Independent Model Training with 5-Fold CV and Hold-Out Evaluation...\n');
+
+%% --------------------- Data Preparation ---------------------
+data = readtable('AR_data2.xlsx');
+if isempty(data), error('Data file not found or empty.'); end
+data = rmmissing(data);
+
+% Feature Engineering
+fprintf('Performing feature engineering...\n');
+data.Delta_LC_LA = data.LCeq - data.LAeq;
+data.Leq63Hz_LAeq_Ratio = data.Leq63Hz ./ (data.LAeq + eps);
+data.LZFmax_LCFmax_Ratio = data.LZFmax ./ (data.LCFmax + eps);
+data.TotalNoiSeQ = data.HNoiSeQ + data.CNoiSeQ;
+data.Delta_ZF_CF = data.LZF99 - data.LCF90;
+data.LAeq_HNoiSeQ = data.LAeq .* data.HNoiSeQ;
+data.Leq63Hz_HNoiSeQ = data.Leq63Hz .* data.HNoiSeQ;
+data.LZF99_LCFmax_Ratio = data.LZF99 ./ (data.LCFmax + eps);
+data.LCFmax_CNoiSeQ = data.LCFmax .* data.CNoiSeQ;
+data.LZFmax_LAeq_Ratio = data.LZFmax ./ (data.LAeq + eps);
+data.LZF99_HNoiSeQ = data.LZF99 .* data.HNoiSeQ;
+data.LZFmax_LCF90_Ratio = data.LZFmax ./ (data.LCF90 + eps);
+
+% Feature Selection
+preFeatures = {'LAeq','LCeq','Leq63Hz','HNoiSeQ','CNoiSeQ', ...
+               'Delta_LC_LA','Leq63Hz_LAeq_Ratio', ...
+               'TotalNoiSeQ','LAeq_HNoiSeQ','Leq63Hz_HNoiSeQ'};
+
+liveFeatures = [preFeatures, {'LZF99','LCFmax','LZFmax','LCF90', ...
+                'LZFmax_LCFmax_Ratio','Delta_ZF_CF','LZF99_LCFmax_Ratio', ...
+                'LCFmax_CNoiSeQ','LZFmax_LAeq_Ratio','LZF99_HNoiSeQ','LZFmax_LCF90_Ratio'}];
+
+% Normalize Features
+[X_pre, mu_pre, sigma_pre] = zscore(table2array(data(:, preFeatures)));
+[X_live, mu_live, sigma_live] = zscore(table2array(data(:, liveFeatures)));
+Y = [data.AR, data.DR];
+
+save('pre_scalingV4.mat', 'mu_pre', 'sigma_pre');
+save('live_scalingV4.mat', 'mu_live', 'sigma_live');
+
+% Axis Limits
+yMin = floor(min(Y(:)) - 0.5);
+yMax = ceil(max(Y(:)) + 0.5);
+
+%% --------------------- Hold-Out Split ---------------------
+rng(42);
+cvHoldout = cvpartition(size(data,1), 'HoldOut', 0.2);
+Xtest_pre = X_pre(test(cvHoldout),:);
+Xtrain_pre = X_pre(training(cvHoldout),:);
+Xtest_live = X_live(test(cvHoldout),:);
+Xtrain_live = X_live(training(cvHoldout),:);
+Ytest = Y(test(cvHoldout),:);
+Ytrain = Y(training(cvHoldout),:);
+
+%% --------------------- Model Training and Evaluation ---------------------
+
+% PreFestival AR
+trainEvaluateFinal(Xtrain_pre, Ytrain(:,1), Xtest_pre, Ytest(:,1), preFeatures, 'PreFestival AR', yMin, yMax, 'LSBoost');
+trainEvaluateFinal(Xtrain_pre, Ytrain(:,1), Xtest_pre, Ytest(:,1), preFeatures, 'PreFestival AR', yMin, yMax, 'RandomForest');
+trainEvaluateFinal(Xtrain_pre, Ytrain(:,1), Xtest_pre, Ytest(:,1), preFeatures, 'PreFestival AR', yMin, yMax, 'NeuralNet');
+
+% PreFestival DR
+trainEvaluateFinal(Xtrain_pre, Ytrain(:,2), Xtest_pre, Ytest(:,2), preFeatures, 'PreFestival DR', yMin, yMax, 'LSBoost');
+trainEvaluateFinal(Xtrain_pre, Ytrain(:,2), Xtest_pre, Ytest(:,2), preFeatures, 'PreFestival DR', yMin, yMax, 'RandomForest');
+trainEvaluateFinal(Xtrain_pre, Ytrain(:,2), Xtest_pre, Ytest(:,2), preFeatures, 'PreFestival DR', yMin, yMax, 'NeuralNet');
+
+% Live AR
+trainEvaluateFinal(Xtrain_live, Ytrain(:,1), Xtest_live, Ytest(:,1), liveFeatures, 'Live AR', yMin, yMax, 'LSBoost');
+trainEvaluateFinal(Xtrain_live, Ytrain(:,1), Xtest_live, Ytest(:,1), liveFeatures, 'Live AR', yMin, yMax, 'RandomForest');
+trainEvaluateFinal(Xtrain_live, Ytrain(:,1), Xtest_live, Ytest(:,1), liveFeatures, 'Live AR', yMin, yMax, 'NeuralNet');
+
+% Live DR
+trainEvaluateFinal(Xtrain_live, Ytrain(:,2), Xtest_live, Ytest(:,2), liveFeatures, 'Live DR', yMin, yMax, 'LSBoost');
+trainEvaluateFinal(Xtrain_live, Ytrain(:,2), Xtest_live, Ytest(:,2), liveFeatures, 'Live DR', yMin, yMax, 'RandomForest');
+trainEvaluateFinal(Xtrain_live, Ytrain(:,2), Xtest_live, Ytest(:,2), liveFeatures, 'Live DR', yMin, yMax, 'NeuralNet');
+
+%% --------------------- Function ---------------------
+function trainEvaluateFinal(X_train, Y_train, X_test, Y_test, featureNames, label, yMin, yMax, modelType)
+    fprintf('Starting 5-Fold Cross-Validation for %s (%s)...\n', label, modelType);
+    cv = cvpartition(size(X_train,1), 'KFold', 5);
+
+    R2_scores = zeros(cv.NumTestSets,1);
+    bestR2 = -Inf;
+    bestModel = [];
+
+    for i = 1:cv.NumTestSets
+        idxTrain = training(cv, i);
+        idxVal = test(cv, i);
+
+        switch modelType
+            case 'LSBoost'
+                model = fitrensemble(X_train(idxTrain,:), Y_train(idxTrain), 'Method', 'LSBoost', ...
+                    'OptimizeHyperparameters', {'NumLearningCycles','LearnRate','MinLeafSize','MaxNumSplits'}, ...
+                    'HyperparameterOptimizationOptions', struct('MaxObjectiveEvaluations', 70, 'Verbose', 0));
+            case 'RandomForest'
+                model = fitrensemble(X_train(idxTrain,:), Y_train(idxTrain), 'Method', 'Bag', ...
+                    'OptimizeHyperparameters', {'NumLearningCycles','MinLeafSize','MaxNumSplits'}, ...
+                    'HyperparameterOptimizationOptions', struct('MaxObjectiveEvaluations', 70, 'Verbose', 0));
+            case 'NeuralNet'
+                model = fitrnet(X_train(idxTrain,:), Y_train(idxTrain), ...
+                    'OptimizeHyperparameters', 'auto', 'HyperparameterOptimizationOptions', struct('MaxObjectiveEvaluations', 70, 'Verbose', 0));
+        end
+
+        Y_val_pred = predict(model, X_train(idxVal,:));
+        R2 = 1 - sum((Y_train(idxVal) - Y_val_pred).^2) / sum((Y_train(idxVal) - mean(Y_train(idxVal))).^2);
+        R2_scores(i) = R2;
+
+        if R2 > bestR2
+            bestR2 = R2;
+            bestModel = model;
+        end
+    end
+
+    meanR2 = mean(R2_scores);
+    fprintf('Average R² across folds for %s (%s): %.4f\n', label, modelType, meanR2);
+
+    % ✅ NEW STEP: Extract best hyperparameters and retrain on full training set
+    switch modelType
+        case 'LSBoost'
+            bestParams = bestModel.HyperparameterOptimizationResults.XAtMinObjective;
+            tree = templateTree('MinLeafSize', bestParams.MinLeafSize, 'MaxNumSplits', bestParams.MaxNumSplits);
+            model_final = fitrensemble(X_train, Y_train, 'Method', 'LSBoost', ...
+                'NumLearningCycles', bestParams.NumLearningCycles, 'LearnRate', bestParams.LearnRate, 'Learners', tree);
+        case 'RandomForest'
+            bestParams = bestModel.HyperparameterOptimizationResults.XAtMinObjective;
+            tree = templateTree('MinLeafSize', bestParams.MinLeafSize, 'MaxNumSplits', bestParams.MaxNumSplits);
+            model_final = fitrensemble(X_train, Y_train, 'Method', 'Bag', ...
+                'NumLearningCycles', bestParams.NumLearningCycles, 'Learners', tree);
+        case 'NeuralNet'
+            model_final = bestModel; % NeuralNet already retrains on full data automatically
+    end
+
+    % Final evaluation on test set
+    Y_test_pred = predict(model_final, X_test);
+    Y_train_pred = predict(model_final, X_train);
+
+    MAE_train = mean(abs(Y_train - Y_train_pred));
+    RMSE_train = sqrt(mean((Y_train - Y_train_pred).^2));
+    R2_train = 1 - sum((Y_train - Y_train_pred).^2) / sum((Y_train - mean(Y_train)).^2);
+
+    MAE_test = mean(abs(Y_test - Y_test_pred));
+    RMSE_test = sqrt(mean((Y_test - Y_test_pred).^2));
+    R2_test = 1 - sum((Y_test - Y_test_pred).^2) / sum((Y_test - mean(Y_test)).^2);
+
+    fprintf('[%s - %s - Final Hold-Out Evaluation]\n', modelType, label);
+    fprintf(' MAE - Training Set : %.4f\n', MAE_train);
+    fprintf('  RMSE - Training Set: %.4f\n', RMSE_train);
+    fprintf('  R²   - Training Set: %.4f\n', R2_train);
+    fprintf('  MAE - Test Set     : %.4f\n', MAE_test);
+    fprintf('  RMSE - Test Set    : %.4f\n', RMSE_test);
+    fprintf('  R²   - Test Set    : %.4f\n', R2_test);
+
+ 
+end
